@@ -1,0 +1,117 @@
+---
+title: "BioConductor- Use of GEOquery & ArrayExpress"
+author: "Hira Ali"
+date: "2025-02-15"
+output: html_document
+---
+
+GEOquery and ArrayExpress are generally used for microassay experiments.
+
+# GEOquery
+
+## Install GEOquery
+
+```{r}
+# install GEOquery package
+BiocManager::install("GEOquery")
+
+library(GEOquery)
+
+```
+
+## Load a specific example dataset from NCBI
+
+For example, we can look into the genomics of glioblastoma and have identified a paper (PMID 27746144) addressing a metabolic pathway whose manipulation may enhance treatment development strategies. Looking at the effects of a certain compound on a metabolic pathway. The paper mentions that the data is archived using the specified GSE ID #.
+
+- Affymetrix Primeview arrays were used, with quantifications available in GEO. 
+- We use getGEO to acquire an image of these data.
+
+```{r}
+
+# getGEO(): Get a GEO object from NCBI or file
+glioMA = getGEO("GSE78703")[[1]]
+```
+
+```{r}
+glioMA
+```
+## Exploring the data a little further:
+
+```{r}
+names(pData(glioMA))
+```
+What returns pertains to a schema that every GEO series satisfies - listed are the names of features that are recorded for each of the samples.
+
+For example, we can determine what molecule is being looked at:
+```{r}
+glioMA$molecule_ch1
+```
+
+From this feature, we can see that it's just total RNA being looked at. We have determined that it's a single channel assay and the molecule that is being assayed is RNA.
+
+We can also explore the design of the experiment a bit further:
+
+```{r}
+# Looking at the basic experimental factors:
+table(glioMA$`treated with:ch1`, glioMA$`cell type:ch1`)
+```
+From the table in the above chunk of code, we have learned that we:
+- have astrocytes (normal) or glioblastoma cells (of a specific cell line).
+- two types of "treatments": DMSO (negative control) and LXR-623 5 uM for 24 hr (treatment)
+
+# ArrayExpress
+
+## Install ArrayExpress
+
+```{r}
+BiocManager::install("ArrayExpress")
+library(ArrayExpress)
+```
+
+## Load a specific dataset
+
+```{r}
+# Setting up a query asking for glioblastoma studies in humans
+## queryAE() = queries the ArrayExpress database, which is a public repository for gene expression and functional genomics datasets
+## keywords = filters the search to return only datasets related to glioblastoma and humans
+### + sign acts as a URL-encoded space
+## The results from queryAE() are stored in the variable sets, a data frame containing details of the queried datasets
+sets = queryAE(keywords = "glioblastoma", species = "homo+sapiens")
+# dim(sets) returns the dimensions (rows, columns) of the sets data frame.
+dim(sets)
+
+```
+
+## Exploring the datasets further
+How do we look at these rows of data in more detail? 
+
+```{r}
+
+BiocManager::install("DT")
+library(DT)
+
+```
+
+```{r}
+# will allow you to interrogate the table of datasets yourself in a more user-friendly way!
+## we can also sort by columns in the output
+datatable(sets)
+```
+
+## Looking into one dataset further
+
+```{r}
+# dir() lists all files and folders in the current working directory
+# initdir is now a vector containing the names of all files and directories present.
+initdir = dir()
+# checking if a file named "E-MTAB-5797.sdrf.txt" exists in the current directory. If not, then use getAE() to fetch and download the dataset E-MTAB-5797 from the ArrayExpress database.
+if (!file.exists("E-MTAB-5797.sdrf.txt")) nano = getAE("E-MTAB-5797")
+```
+
+```{r}
+# Captures the list of files in the directory after running getAE().
+afterget = dir()
+# setdiff() Compares afterget (new state) and initdir (old state).
+setdiff(afterget, initdir)
+```
+

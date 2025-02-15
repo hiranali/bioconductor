@@ -1,0 +1,195 @@
+---
+title: "Bioconductor-IRanges-n-GenomicRanges"
+author: "Hira Ali"
+date: "2025-02-15"
+output: html_document
+---
+
+ExpressionSet was designed for microarray-based experiments, in which genomic features to be measured are all prespecified and can be individually named in advance.  
+
+With NGS, features of interest can be defined fairly arbitrarily in terms of genomic coordinates.  Additional constraints are important, so that the reference within which coordinates are defined is made explicit, and the compatibility of region specification with reference limitations (for example, upper bounds on addresses given by chromosome lengths) can be guaranteed.  
+
+In this Rmd, I'll overview Bioconductor's approach to managing sequencing-based assays depends fundamentally on the IRanges and GenomicRanges packages.
+
+# Interval ranges: IRanges
+
+## Install & Load IRanges package
+
+```{r}
+BiocManager::install("IRanges")
+library(IRanges)
+```
+
+## Basics
+
+Demonstrating some of the most key functions:
+
+```{r}
+
+ir <- IRanges(5,10)
+ir
+
+```
+
+```{r}
+start(ir)
+end(ir)
+width(ir)
+```
+
+A single IRanges object can hold more than one range. We do this by specifying vector to the start and end arguments.
+
+```{r}
+# specifying the starting value of the vectors, the ending value of the vectors, and will also output the width from start to end.
+IRanges(start=c(3,5,17), end=c(10,8,20))
+
+```
+
+For example in the first row, we see a start at "base pair" 3, ending at "base pair" 10, and the width is 8 "base pairs long".
+
+```{r}
+ir
+ir <- IRanges(5, 10)
+```
+
+There are also various intra-range methods. Intra-range means that the operation will occur for each range that you have and it doesn't depend on the other ranges that are contained in the IRanges object.
+
+```{r}
+
+# i.e. we can shift the IRange by 2
+shift(ir, -2)
+
+```
+Now, we have an output of a range that starts at 3 (instead of 5 originally) and ends at 8 (originally ended at 10).
+
+```{r}
+
+# i.e. narrow() says relative to the start, you should start this range at the 2nd base pair
+narrow(ir, start=2)
+
+# i.e. relative to the end, you should end at the 5th base pair
+narrow(ir, end = 5)
+```
+```{r}
+
+# flank() allows you to get flanking sequence here, 3 base pairs from the start 
+flank(ir, width=3, start=TRUE, both=FALSE)
+
+# you can also get 3 base pairs from the end by specifying start = FALSE
+flank(ir, width=3, start=FALSE, both=FALSE)
+
+
+```
+## Seeing the same basic functions Graphically
+
+Those same operations plotted in a single window. The red bar shows the shadow of the original range ir.
+
+```{r}
+# set up a plotting window so we can look at range operations
+plot(0,0,xlim=c(0,23),ylim=c(0,13),type="n",xlab="",ylab="",xaxt="n")
+axis(1,0:15)
+abline(v=0:14 + .5,col=rgb(0,0,0,.5))
+
+# plot the original IRange
+## number indicates the base pair
+plotir <- function(ir,i) { arrows(start(ir)-.5,i,end(ir)+.5,i,code=3,angle=90,lwd=3) }
+plotir(ir,1)
+
+# draw a red shadow for the original IRange
+polygon(c(start(ir)-.5,start(ir)-.5,end(ir)+.5,end(ir)+.5),c(-1,15,15,-1),col=rgb(1,0,0,.2),border=NA)
+
+# draw the different ranges
+plotir(shift(ir,-2), 2)
+plotir(narrow(ir, start=2), 3)
+plotir(narrow(ir, end=5), 4)
+plotir(flank(ir, width=3, start=TRUE, both=FALSE), 5)
+plotir(flank(ir, width=3, start=FALSE, both=FALSE), 6)
+plotir(flank(ir, width=3, start=TRUE, both=TRUE), 7)
+plotir(ir * 2, 8)
+plotir(ir * -2, 9)
+plotir(ir + 2, 10)
+plotir(ir - 2, 11)
+plotir(resize(ir, 1), 12)
+
+text(rep(15,12), 1:12, c("ir","shift(ir,-2)","narrow(ir,start=2)",
+                         "narrow(ir,end=5)",
+                         "flank(ir, start=T, both=F)",
+                         "flank(ir, start=F, both=F)",
+                         "flank(ir, start=T, both=T)",
+                         "ir * 2","ir * -2","ir + 2","ir - 2",
+                         "resize(ir, 1)"), pos=4)
+
+```
+
+## Example: Creating an IRanges object with 3 ranges
+
+```{r}
+# full details on the inter-range methods:
+# ?"inter-range-methods"
+(ir <- IRanges(start=c(3,5,17), end=c(10,8,20)))
+range(ir)
+```
+
+The `reduce` function collapses the ranges, so that integers are covered by only one range in the output.
+
+```{r}
+reduce(ir)
+```
+
+The `gaps` function gives back the ranges of integers which are in `range(ir)` but not covered by any of the ranges in `ir`:
+
+```{r}
+gaps(ir)
+```
+
+The `disjoin` function breaks up the ranges in `ir` into discrete ranges. This is best explained with examples, but here is the formal definition first:
+
+> returns a disjoint object, by finding the union of the
+> end points in ‘x’. In other words, the result consists of a range
+> for every interval, of maximal length, over which the set of
+> overlapping ranges in ‘x’ is the same and at least of size 1.
+
+```{r}
+disjoin(ir)
+```
+# Genomic Ranges: GRanges
+
+Genomic Ranges is an extension of IRanges to the Genomic Space.
+
+## Install & Load GRanges Package
+
+```{r}
+BiocManager::install("GenomicRanges")
+library(GenomicRanges)
+```
+
+*GRanges* are objects which contain *IRanges* and two more important pieces of information:
+
+* the chromosome we are referring to (called `seqnames` in Bioconductor)
+* the strand of DNA we are referring to
+
+Strand can be specified as plus "+" or minus "-", or left unspecified with "\*". 
+
+* Plus strand features have the biological direction from left to right on the number line, * Minus strand features have the biological direction from right to left.
+
+In terms of the *IRanges*:
+
+* plus strand features go from `start` to `end`
+* minus strand features go from `end` to `start`. 
+
+This is required because `width` is defined as `end - start + 1`, and negative width ranges are not allowed. Because DNA has two strands, which have an opposite directionality, strand is necessary for uniquely referring to DNA.
+
+With an *IRange*, a chromosome name, and a strand, we can be sure we are uniquely referring to the same region and strand of the DNA molecule as another researcher, given that we are using the same build of *genome*. There are other pieces of information which can be contained within a GRanges object, but the two above are the most important.
+
+## Example two ranges with a made-up chromosome
+
+Creationg a set of two ranges on a made-up chromosome, *chrZ*. These ranges refer to the genome *hg19*. Because we have not linked our genome to a database, we are allowed to specify a chromosome which does not really exist in *hg19*.
+
+```{r}
+gr <- GRanges("chrZ", IRanges(start=c(5,10),end=c(35,45)),
+              strand="+", seqlengths=c(chrZ=100L))
+gr
+
+genome(gr) <- "hg19"
+gr
+```

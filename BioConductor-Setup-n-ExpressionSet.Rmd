@@ -1,9 +1,11 @@
 ---
-title: "Bioconductor - Packages"
+title: "Bioconductor - Setup & Use of ExpressionSet Class"
 author: "Hira Ali"
 date: "2025-02-12"
 output: html_document
 ---
+
+ExpressionSet was designed to be used for microarray experiments, which is a bit of an outdated data generation approach due to the advancements with NGS. But still good background and helpful to understand to explore datasets from public repositories.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -214,29 +216,62 @@ es5859[1:4, 1:3]
 ```
 
 We can also subset for gene expression data on a specific chromosome.
+
+We can first take a peek at the first few rows and colums of fData(es5859) in more detail:
+```{r}
+
+fData(es5859)[1:5,]
+
+```
+
+```{r}
+# tells us how many features exist
+length(which(fData(es5859)$CHR=="chrY"))
+```
+
 One of the nice things about this arrangement is that we can easily select features using higher level concepts annotated in the fData and pData components. For example to obtain expression data for genes on the Y chromosome only:
 
 ```{r}
+# subsetting EspressionSet for chrY features
 es5859[which(fData(es5859)$CHR=="chrY"),]
+#returns an expression set that is limited to probes on chromosome Y, for all 24 samples
+```
+The most important methods are
+
+- exprs(): get the numerical expression values
+- pData(): get the sample-level data
+- fData(): get feature-level data
+- annotation(): get a tag that identifies nomenclature for feature names
+- experimentData(): get a MIAME-compliant metadata structure. This is about the entire experiment - not just the samples, not just the features, or values of the assay. It describes them as a whole.
+    NOTE: we'd like to bind that type of information right on the object that is holding the expression data and sample data.
+    NOTE: MIAME = minimum information about a microarray experiment
+
+```{r}
+BiocManager::install("annotate")
+library(annotate)
+# annotate has a function called pmid2MIAME(). Note that pmid = pubmed IDs.
+mi = pmid2MIAME("17206142")
+experimentData(es5859) = mi
+es5859
+```
+Now we have mi which can tell us some overall information from pubmed.
+```{r}
+# returns information pulled from pubmed in a formalized structure.
+mi
+```
+We also have learned that there is an abstract available which we can pull using the 'abstract' method.
+
+```{r}
+# returns information pulled from pubmed in a formalized structure.
+abstract(mi)
+```
+es5859 does not have this information yet, but if we do the following, we can associate the pubmed id with the experiment data:
+```{r}
+# experimentData() is a function that retrieves or sets the experimental metadata for an object (often an ExpressionSet in Bioconductor).
+# = mi assigns a new metadata object (mi) to the experimentData of es5859.
+experimentData(es5859) = mi
 ```
 
+Now es5859 has a pubMedId associated!
 
-<!-- ## R Markdown -->
-
-<!-- This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>. -->
-
-<!-- When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this: -->
-
-<!-- ```{r cars} -->
-<!-- summary(cars) -->
-<!-- ``` -->
-
-<!-- ## Including Plots -->
-
-<!-- You can also embed plots, for example: -->
-
-<!-- ```{r pressure, echo=FALSE} -->
-<!-- plot(pressure) -->
-<!-- ``` -->
-
-<!-- Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot. -->
+Overall, we can leverage different approaches/functions to unify multiple tables and other types of information schema to combine both numerical data with interpretation guides that ultimately help us with biological interpretation.
