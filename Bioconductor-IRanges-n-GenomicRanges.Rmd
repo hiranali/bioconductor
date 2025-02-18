@@ -181,15 +181,131 @@ This is required because `width` is defined as `end - start + 1`, and negative w
 
 With an *IRange*, a chromosome name, and a strand, we can be sure we are uniquely referring to the same region and strand of the DNA molecule as another researcher, given that we are using the same build of *genome*. There are other pieces of information which can be contained within a GRanges object, but the two above are the most important.
 
-## Example two ranges with a made-up chromosome
+## Example: Practice with two ranges with a made-up chromosome
 
 Creationg a set of two ranges on a made-up chromosome, *chrZ*. These ranges refer to the genome *hg19*. Because we have not linked our genome to a database, we are allowed to specify a chromosome which does not really exist in *hg19*.
 
 ```{r}
+# using GRanges to create an object called gr. naming the chromosome chrZ.
+# using IRanges to define the start and end positions of the selected regions on the chromosome. AKA range of a set of sequences.
+## in this case, we have two sets, first from position 5 to 35, and the second from position 10 to 45.
 gr <- GRanges("chrZ", IRanges(start=c(5,10),end=c(35,45)),
+              # specifying strand feature: + direction
+              # specifying the total length of chromosome Z = 100 base pairs.
               strand="+", seqlengths=c(chrZ=100L))
+# when returning this initially, we see that seqinfo mentions that the genome is unspecified.
 gr
 
+# specifying the genome of object, gr (from Human Genome reference)
+## Recall that because awe haven't actually linked our genome to a datbase, we can specify a chromosome that doesn't actually exist in hg19.
 genome(gr) <- "hg19"
+# now returns seqinfo: 1 sequence from hg19 genome
 gr
 ```
+Note the `seqnames` and `seqlengths` which we defined in the call above:
+
+```{r}
+seqnames(gr)
+seqlengths(gr)
+```
+We can use the `shift` function as we did with the IRanges. However, notice the warning when we try to shift the range beyond the length of the chromosome:
+
+```{r}
+# shifting ranges up 10 (i.e. from start = 5 to start = 15)
+shift(gr, 10)
+# this wont work bc it would be out of range for the chromosome length (i.e. from end = 35 to end = 115 which doesnt exist)
+shift(gr, 80)
+```
+
+If we `trim` the ranges, we obtain the ranges which are left, disregarding the portion that stretched beyond the length of the chromosome:
+
+```{r}
+# using trim, we wont go out of bounds for the range if the position does not exist
+trim(shift(gr, 80))
+```
+
+We can add columns of information to each range using the `mcols` function (stands for *metadata columns*). Note: this is also possible with IRanges. We can remove the columns by assigning `NULL`.
+
+```{r}
+# at this point, will return 2 rows and 0 columns since we haven't added any metadata
+mcols(gr)
+
+# at this point, we have added 1 metadata column named 'value' and specified the values in the new column
+mcols(gr)$value <- c(-1,4)
+gr
+
+# specifying 'NULL' removes the values associated in the created columnm
+mcols(gr)$value <- NULL
+```
+
+### GRangesList
+
+Especially when referring to genes, it is useful to create a *list* of GRanges. This is useful for representing groupings, for example the [exons](http://en.wikipedia.org/wiki/Exon) which belong to each gene. The elements of the list are the genes, and within each element the exon ranges are defined as GRanges.
+
+```{r}
+# Creating a second GRanges object called gr2
+## "chrZ" specifies that the following ranges belong to chromosome Z.
+## 11:13 is specifying all start positions between 11:13 (inclusive), AKA start positions are 11, 12, and 13. Same for 51:53 (specifying the end positions).
+## Note: IRanges() pairs element-wise
+gr2 <- GRanges("chrZ",IRanges(11:13,51:53))
+
+# now we can create a new GRanges list by wrapping these two objects using the GRangesList function
+grl <- GRangesList(gr, gr2)
+# Now this object contains two GRanges.
+grl
+```
+
+The most obvious example of a GRangesList would be grouping exons by gene, or grouping exons by transcript.
+
+The length of the *GRangesList* is the number of *GRanges* object within. To get the length of each GRanges we call `elementNROWS`. We can index into the list using typical list indexing of two square brackets.
+
+```{r}
+# Returns the number of elements (AKA the number of GRanges) in grl. In this case, we have 2 GRanges objects.
+length(grl)
+
+# Returns the number of genomic ranges within each element (i.e., the number of rows in each GRanges object). In this case, the first GRanges object has 2 ranges. The second GRanges elemenet has 3 ranges.
+elementNROWS(grl)
+
+# To return the first element, which would be the first GRanges object.
+grl[[1]]
+
+```
+If we ask the `width`, the result is an *IntegerList*. If we apply `sum`, we get a numeric vector of the sum of the widths of each GRanges object in the list.
+
+```{r}
+# telling us the length of each of the ranges, within each of the GRanges objects.
+## i.e. first element of first GRanges object is of start = 5 & end = 35. so the  width is = end - start + 1 = 35 - 5 + 1 = 31. This is the first value returned of the first GRanges object.
+width(grl)
+# adding the lengths of ranges of each GRanges object together (i.e. for first object, 31 + 36 = 67, which is the first value returned).
+sum(width(grl))
+```
+
+We can add metadata columns as before, now one row of metadata for each GRanges object, not for each range. It doesn't show up when we print the GRangesList, but it is still stored and accessible with `mcols`.
+
+```{r}
+mcols(grl)$value <- c(5,7)
+grl
+mcols(grl)
+```
+
+### findOverlaps and %over%
+
+We will demonstrate two commonly used methods for comparing GRanges objects. First we build two sets of ranges:
+
+```{r}
+(gr1 <- GRanges("chrZ",IRanges(c(1,11,21,31,41),width=5),strand="*"))
+(gr2 <- GRanges("chrZ",IRanges(c(19,33),c(38,35)),strand="*"))
+```
+
+`findOverlaps` returns a *Hits* object which contains the information about which ranges in the query (the first argument) overlapped which ranges in the subject (the second argument). There are many options for specifying what kind of overlaps should be counted.
+
+```{r}
+# creating an object called fo (find objects). query = gr1 (first argument), and subject = gr2 (second argument)
+fo <- findOverlaps(gr1, gr2)
+# i.e. in this case, we see a total of 3 hits between the query and subject.
+## i.e. in this case, we see that range 3 of gr1 (21-25) overlaps with range 1 of gr2 (19-38)
+fo
+queryHits(fo)
+subjectHits(fo)
+```
+
