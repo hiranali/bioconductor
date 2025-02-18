@@ -155,5 +155,4 @@ plotGRanges(flank(gir,3), xlim=c(0,60), col="purple")
 plotGRanges(flank(gir,2,start=FALSE), xlim=c(0,60), col="brown")
 ```
 
-Note that we do not need to take special steps to
-deal with the differences in strand.
+Note that we do not need to take special steps to deal with the differences in strand.
