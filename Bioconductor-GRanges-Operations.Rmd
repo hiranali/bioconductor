@@ -1,0 +1,159 @@
+---
+title: GRanges Operations Reference related to Gene Model, TSS, and Promoter Region
+  Identification
+author: "Hira Ali"
+date: "2025-02-18"
+output: html_document
+---
+
+```{r options, echo=FALSE}
+library(knitr)
+opts_chunk$set(fig.path=paste0("figure/", sub("(.*).Rmd","\\1",basename(knitr:::knit_concord$get('infile'))), "-"))
+```
+
+```{r setup,echo=FALSE,results="hide"}
+suppressPackageStartupMessages({
+library(BSgenome.Hsapiens.UCSC.hg19)
+BiocManager::install("TxDb.Hsapeins.UCSC.hg19.knownGene")
+library(TxDb.Hsapiens.UCSC.hg19.knownGene)
+BiocManager::install("TxDb.Hsapiens.UCSC.hg38.knownGene")
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+library(Biostrings)
+library(GenomicRanges)
+library(IRanges)
+BiocManager::install("ph525x")
+library(ph525x)
+BiocManager::install("Homo.sapiens")
+library(Homo.sapiens)
+BiocManager::install("Gviz")
+library(Gviz)
+})
+```
+
+# Overview
+
+Working with a small set of ranges and illustrating the basic intra-range operations: reduce, disjoin, & gaps.
+Then will be adding strand and seqname information and show how resize and flank are useful for identifying TSS and promoter regions.
+
+# Defining plotRanges() and plotGRanges()
+
+```{r plotr,echo=FALSE}
+plotRanges <- function(x, xlim = x, main = deparse(substitute(x)),
+                       col = "black", sep = 0.5, ...)
+{
+  height <- 1
+  if (is(xlim, "Ranges"))
+    xlim <- c(min(start(xlim)), max(end(xlim)))
+  bins <- disjointBins(IRanges(start(x), end(x) + 1))
+  plot.new()
+  plot.window(xlim, c(0, max(bins)*(height + sep)))
+  ybottom <- bins * (sep + height) - height
+  rect(start(x)-0.5, ybottom, end(x)+0.5, ybottom + height, col = col, ...)
+  title(main)
+  axis(1)
+}
+
+plotGRanges = function (x, xlim = x, col = "black", sep = 0.5, xlimits = c(0, 
+    60), ...) 
+{
+    main = deparse(substitute(x))
+    ch = as.character(seqnames(x)[1])
+    x = ranges(x)
+    height <- 1
+    if (is(xlim, "Ranges")) 
+        xlim <- c(min(start(xlim)), max(end(xlim)))
+    bins <- disjointBins(IRanges(start(x), end(x) + 1))
+    plot.new()
+    plot.window(xlim = xlimits, c(0, max(bins) * (height + sep)))
+    ybottom <- bins * (sep + height) - height
+    rect(start(x) - 0.5, ybottom, end(x) + 0.5, ybottom + height, 
+        col = col, ...)
+    title(main, xlab = ch)
+    axis(1)
+}
+```
+
+# Creating a Simple Set of Ranges
+
+```{r}
+
+ir <- IRanges(c(3, 8, 14, 15, 19, 34, 40),
+  width = c(12, 6, 6, 15, 6, 2, 7))
+
+```
+
+
+We can visualize ir and several intra-range operations.
+
+* *reduce(x)* : merges overlapping or adjacent ranges into a single range, If two or more intervals overlap or are adjacent, they are combined into one continuous range.
+    * This can be used to reduce complexity of a gene modelwith many transcripts, where we may just want the addresses of intervals known to be transcribed, regardless of transcript of residence.
+
+* *disjoin(x)* : splits ranges at overlapping points so that each new range is non-overlapping. Thus, you get the smallest disjoin regions from the original ranges. If two ranges overlap even slightly, they are split into separate, non-overlapping segments.
+    * This gives us the largest possible collection of contiguous intervals that are separated wherever the original set of intervals had an endpoint.
+
+* *gaps(x)*: returns the gaps (uncovered regions) between the input ranges. Thus, we are able to find the spaces between the intervals.
+    * produces a set of ranges covering the positions in [start(x), end(x)] that are not covered by any range in x. Given coding sequence addresses and exon intervals, this can be used to enumerate introns.
+
+```{r}
+par(mfrow=c(4,1), mar=c(4,2,2,2))
+plotRanges(ir, xlim=c(0,60)) # original ranges
+# using reduce function - plotting merged, overlapping ranges
+plotRanges(reduce(ir), xlim=c(0,60))
+# using disjoin function - plotting non-overlapping segments
+plotRanges(disjoin(ir), xlim=c(0,60))
+#using gaps function - plotting uncovered ranges
+plotRanges(gaps(ir), xlim=c(0,60))
+```
+# Extension to GRanges
+
+We add chromosome and strand information.
+
+```{r dogr}
+library(GenomicRanges)
+# specifying seqname and giving the same range information we had before (ir)
+# also specifying that the first 4 ranges are on the positive strand and the last 3 are on the negative strand
+gir = GRanges(seqnames="chr1", ir, strand=c(rep("+", 4), rep("-",3)))
+
+gir
+```
+We can also specify more about the genome we are working with. 
+```{r}
+genome(gir) = "hg13"
+
+```
+
+We can also take a look at the sequence info.
+
+```{r}
+seqinfo(gir)
+```
+
+
+Let's assume the intervals represent genes, some overlapping.
+The following plots illustrate the identification of transcription start sites (green), upstream promoter regions (purple), downstream promoter regions (brown).
+
+```{r dopr,fig=TRUE, out.height="800px", out.width="500px"}
+## mfrow=c() - creates a 4-row, 1-column grid of plots so that four plots are displayed in vertical stack
+## mar=c() - adjusts margins for the plot (bottom, left, top, right)
+par(mfrow=c(4,1), mar=c(4,2,2,2))
+
+# plotting original genomic ranges with coordinates from 0-60.
+plotGRanges(gir, xlim=c(0,60))
+
+# resize() - resizes each genomic interval in gir to to be exactly 1 bp long. resized ranges in green.
+## effect: original ranges shrink to 1 bp long regions, centered on their start positions.
+### note the difference in start positions for + vs. - strands (always from 5' to 3' direction)
+plotGRanges(resize(gir,1), xlim=c(0,60),col="green")
+
+# flank() - extends a 3-bp region upstream of each range in gir. plots these flanking regions in purple.
+## effect: new intervals are created before the original start positions (default behavior)
+### for example what if you want to investigate the promoter regions which are 3 bp's upstream?
+plotGRanges(flank(gir,3), xlim=c(0,60), col="purple")
+
+# flank(gir, 2, start = FALSE) - extends a 2-bp region downstream of each range in fir (i.e. towards the end instead of the start position). plots these in brown.
+## effect: new regions are placed after the original ranges.
+plotGRanges(flank(gir,2,start=FALSE), xlim=c(0,60), col="brown")
+```
+
+Note that we do not need to take special steps to
+deal with the differences in strand.

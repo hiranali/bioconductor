@@ -303,9 +303,73 @@ We will demonstrate two commonly used methods for comparing GRanges objects. Fir
 # creating an object called fo (find objects). query = gr1 (first argument), and subject = gr2 (second argument)
 fo <- findOverlaps(gr1, gr2)
 # i.e. in this case, we see a total of 3 hits between the query and subject.
-## i.e. in this case, we see that range 3 of gr1 (21-25) overlaps with range 1 of gr2 (19-38)
+## i.e. in this case, we see that range 3 (AKA 3rd element) of gr1 (21-25) overlaps with range 1 of gr2 (19-38)
 fo
+# returns the indices of the query regions that have an overlap (i.e. if an entry in query overlaps multiple entries in subject, it will appear multiple times)
 queryHits(fo)
+# returns the indicies of subject regions that overlap with the corresponding queryHits(). i.e. if a query overlaps multiple subject ranges, you get multiple indicies.
 subjectHits(fo)
 ```
+Another way of getting at overlap information is to use `%over%` which returns a logical vector of which ranges in the first argument overlapped any ranges in the second.
 
+```{r}
+# returns TRUE or FALSE, where TRUE is stating that the range in the first argument overlapped with a range in the second.
+gr1 %over% gr2
+# returning only ranges in gr1 that had some overlap with gr2
+gr1[gr1 %over% gr2]
+```
+Note that both of these are *strand-specific*, although `findOverlaps` has an `ignore.strand` option.
+
+```{r}
+gr1 <- GRanges("chrZ",IRanges(1,10),strand="+")
+gr2 <- GRanges("chrZ",IRanges(1,10),strand="-")
+gr1 %over% gr2
+```
+
+### Rle and Views
+
+Lastly, here is a short glimpse into two related classes defined in IRanges, the *Rle* and *Views* classes. 
+
+* *Rle* stands for *run-length encoding*, which is a form of compression for repetitive data. Instead of storing: $[1,1,1,1]$, we would store the number 1, and the number of repeats: 4. The more repetitive the data, the greater the compression with *Rle*.
+
+Some notes: 
+* Runs = unique values
+* Lengths = How many times each value repeats
+
+We use `str` to examine the internal structure of the Rle, to show it is only storing the numeric values and the number of repeats
+
+```{r}
+# Rle() create a Run-Length Encoding object, which is a way to store repeated values efficiently. Representing values in a compact form.
+## The argument inside Rle() is a vector containing repeated values.
+## rep() expands a value x, y # of times. i.e. expanding the value, -1, twenty times.
+## Note, return includes the total length which = listed values + 20 repeats = 28. It also includes the # of runs which is 4 (values include 1, 0, -2, and -1).
+## () around the whole line prints r immediately.
+(r <- Rle(c(1,1,1,0,0,-2,-2,-2,rep(-1,20))))
+
+# shows the internal structure of the Rle object. This includes the unique values, the lengths of each of the unique values respectively, the elementMetadata, and the metadata.
+## Only storing the compact representation.
+str(r)
+
+# as.numeric() converts Rle object, r, back into a regular numeric vector. 
+## Now, we would be able to return the expanded version.
+as.numeric(r)
+```
+
+A *Views* object can be thought of as "windows" looking into a sequence. Or in other words, if we want to view different regions of the sequence.
+
+* *Views* is a virtual class which contains the subject, and then the number of views which are essentially IRanges into that object. It is a virtual class in the sense that it does not deconstruct the Rle, but instead we have just saved the Rle and a number of windows into it.
+
+```{r}
+# i.e. we have the Rle object, r. We want to create two views, one which starts at 4 and ends at 7, and another that starts at 2 and ends at 6.
+# returns the values at these positions within the Rle.
+(v <- Views(r, start=c(4,2), end=c(7,6)))
+```
+
+Note that the internal structure of the Views object is just the original object, and the *IRanges* which specify the windows. The great benefit of Views is when the original object is not stored in memory, in which case the Views object is a lightweight class which helps us reference subsequences, without having to load the entire sequence into memory.
+
+ You can also use the Views constructor for FASTA files, for example, if you want to look into genome sequence or other objects.
+
+```{r}
+# Looking at the internal structure of the object, v, of virtual class or in other words, formal class is of Rle.
+str(v)
+```
