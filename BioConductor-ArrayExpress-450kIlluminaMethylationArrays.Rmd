@@ -1,0 +1,139 @@
+---
+title: "ArrayExpress-450kIlluminaMethylationArrays"
+author: "Hira Ali"
+date: "2025-02-18"
+output: html_document
+---
+
+In our discussion of the ArrayExpress european archive, we downloaded a study of methylation in glioblastoma samples. Recall we used getAE() to retrieve a specific experiment from the database.
+
+The SummarizedExperiment class was designed for use with all kinds of array or short read sequencing data. The getAE call used above retrieved a number of files from ArrayExpress recording methylation quantification in glioblastoma tissues.
+
+The sample level data are in the sdrf.txt file:
+
+```{r}
+library(data.table)
+sd5797 = fread("/Users/hiraali/E-MTAB-5797.sdrf.txt")
+head(sd5797[,c(3,16,18)])
+```
+From the above information at least, we have determined that:
+- There are two channels from the methylation assays.
+- Three individuals are contributing data to these first 6 records (based on ages given).
+
+The raw assay data are delivered in idat files. In other words, idat files are the actual, minimally processed numerical data from teh methylation assay. We import these using read.metharray() from the minfi package.
+
+
+```{r}
+# installing minfi package
+BiocManager::install("minfi")
+# loading minfi package which is used to import the data into R.
+## commonly used for processing and analyzing DNA methylation data, particularly from Illumina Infinium arrays.
+library(minfi)
+
+# dir(patt="idat") lists all files in the working directory that contain "idat" in their names
+#substr(..., 1, 17) extracts the first 17 characters of each filename (this is typically the shared prefix of IDAT files from Illumina methylation arrays).
+## unique(...) ensures that each prefix is listed only once (since each sample usually has two IDAT files: one for green and one for red).
+pref = unique(substr(dir(patt="idat"),1,17)) # find the prefix strings
+
+
+# The result (pref) is a list of sample identifiers, which are used to load the corresponding raw data.
+
+# read.metharray(pref) reads the methylation data files (.idat files) corresponding to the prefixes in pref
+# automatically finds and pairs the red and green channel .idat files for each sample
+
+raw = read.metharray(files_cleaned)
+raw
+# raw, is a RGChannelSet object, which contains raw intensity values for methylation and unmethylation probes
+```
+
+```{r}
+# troubleshooting why files aren't be pulled/read in properly
+# Get all file names from the directory containing .idat
+files <- list.files(pattern = "idat")
+# returning files to confirm that the expected files were saved (both green and red)
+files
+# Check for spaces or unusual characters
+sapply(pref, function(x) paste0("'", x, "'"))
+## This will surround the filenames with single quotes to reveal any extra spaces. If there are spaces, you can clean the filenames by removing them:
+## Confirmed, there are some leading spaces at the beginning before the prefixes
+
+# Remove leading/trailing spaces from filenames
+files_cleaned <- gsub("^\\s+|\\s+$", "", pref)
+
+#trying this again with the newly cleaned files
+pref = unique(substr(files_cleaned, 1, 17)) 
+
+
+# More troubleshooting: pref stores again but raw still read.metharray() still not storing as expected
+
+# Check if a specific file is in the list
+file_name <- "9406922003_R02C01_Grn.idat"
+if(file_name %in% files) {
+  print("File exists!")
+} else {
+  print("File does not exist!")
+}
+
+# Compare the files using identical
+identical("9406922003_R02C01_Grn.idat", files[1])  # Compare first file in list
+
+# Alternatively, compare the files with all.equal()
+all.equal(file_name, files[1])
+
+# where the idat files are located
+baseDir = "/Users/hiraali"
+
+# List only files containing 'idat' within baseDir
+files_cleaned <- list.files(path = baseDir, pattern = "idat", full.names = FALSE)
+
+# Extract unique prefixes (first 17 characters)
+pref = unique(substr(files_cleaned, 1, 17))
+
+# Print the result to verify
+print(pref)
+
+## 
+baseDir <- "/Users/hiraali/"
+raw <- read.metharray(file.path(baseDir, pref))
+
+files <- list.files(path = baseDir, pattern = "idat$", full.names = TRUE) 
+pref <- unique(sub("_Grn\\.idat|_Red\\.idat", "", basename(files)))
+
+file.exists(file.path(baseDir, pref, "_Grn.idat"))
+file.exists(file.path(baseDir, pref, "_Red.idat"))
+
+print(file.path(baseDir, pref, "_Grn.idat"))
+print(file.path(baseDir, pref, "_Red.idat"))
+
+
+# if the files are directly inside /Users/hiraali, then _Grn.idat is being incorrectly treated as a subdirectory.
+
+baseDir <- sub("/$", "", baseDir)  # Remove trailing slash if it exists
+file_paths_red <- file.path(baseDir, paste0(pref, "_Red.idat"))
+
+file_paths_green <- file.path(baseDir, paste0(pref, "_Grn.idat"))
+file_paths_red <- file.path(baseDir, paste0(pref, "_Red.idat"))
+
+print(file_paths_green)
+print(file_paths_red)
+file.exists(file_paths_green)
+file.exists(file_paths_red)
+
+# checking for any hidden characters. specific filke that results in false output has the same number of characters.
+cat(file_paths_red, sep = "\n")
+nchar(file_paths_red)
+
+# following confirmed that this specific file is not readable at the moment
+file.access(file_paths_red[3], 4)  # 0 = readable, -1 = not readable
+chmod +r /Users/hiraali/9406922003_R04C02_Red.idat
+
+
+
+```
+
+
+```{r}
+list.files(pattern = "idat")
+
+```
+

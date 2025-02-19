@@ -1,0 +1,125 @@
+---
+title: "Intro to SummarizedExperiment"
+author: "Hira Ali"
+date: "2025-02-18"
+output: html_document
+---
+
+```{r}
+methods(class="SummarizedExperiment")
+
+```
+# Example: An RNA-seq Experiment
+
+Airway is a package that is going to be used to illustrate SummarizedExperiment concept.
+
+This package provides a RangedSummarizedExperiment object of read counts in genes for an RNA-Seq experiment on four human airway smooth muscle cell lines treated with dexamethasone. Or in simpler terms, using a dataset from cells that have been cultured from the human airway, the human lung.
+
+Details on the gene model and read counting procedure are provided in the package vignette. 
+
+The citation for the experiment is: Himes BE, Jiang X, Wagner P, Hu R, Wang Q, Klanderman B, Whitaker RM, Duan Q, Lasky-Su J, Nikolos C, Jester W, Johnson M, Panettieri R Jr, Tantisira KG, Weiss ST, Lu Q. 'RNA-Seq Transcriptome Profiling Identifies CRISPLD2 as a Glucocorticoid Responsive Gene that Modulates Cytokine Function in Airway Smooth Muscle Cells.' PLoS One. 2014 Jun 13;9(6):e99625. PMID: 24926665. GEO: GSE52778.
+
+## Loading dataset first
+```{r}
+
+library(airway)
+data(airway)
+airway
+
+```
+The output of airway tells us we have an object named, airway, of class RangedSummarizedExperiment. We have a total of ~64,000 features, and 8 samples in total. There is also a metadata component but it doesn't have a name. There is also a total of one assay associated, called counts.
+
+## Looking at associated metadata
+```{r}
+
+metadata(airway)
+
+```
+
+```{r}
+# Take a look at the asasy - first four features and first five columns.
+assay(airway[1:4, 1:5])
+```
+
+What we see in the output is counts of different genes that are enumerated using hte ENSEMBL. We don't have any row data so we will have to figure out what these ensemble gene identifiers are.
+
+```{r}
+# taking a look at the column data across all 8 samples
+colData(airway)
+```
+We have a paired design where each cell source is either treated with dexamethasone (trt) or left untreated (untrt). And it looks like this may be a subset from some study where albuterol may have also been part of the intervention.
+
+```{r}
+
+rowRanges(airway)
+
+```
+The rowRanges(airway) (airway is a type of SummarizedExperiment) turns out to be a GRanges list.
+That means that we can learn more about the genes that are listed as row names of the assay data by looking at rowRanges.
+
+We can see that the first gene listed is from the X chromosome and it has 17 exons.
+
+Note: The features that are quantified are exons, annotated using ENSEMBL nomenclature. The exons have the notation, "ENSE" (ENS + E for exon).
+
+## Looking at exon-level quantifications
+
+We may be accustomed to gene-level quantification in microarray studies. Here the use of exon-level quantifications necessitates special computations for gene-level summaries. 
+
+```{r}
+# Load biomaRt
+library(biomaRt)
+
+# Connect to the Ensembl database
+## "genes" - specifying that we want to query gene-related data
+## "hsapiens_gene_ensembl" - specifies that we want human gene annotations (Homo sapiens).
+ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl")
+
+# Query the ENSEMBL ID for ORMDL3
+result <- getBM(
+  # specifying the columns we want in the output: ensembl_gene_id (Ensembl Gene ID (e.g., ENSG00000172057)) and external_gene_name (Common gene name (e.g., ORMDL3))
+  attributes = c("ensembl_gene_id", "external_gene_name"),
+  # Specifies the condition used to filter the search. We are searching by ensembl ID.
+  filters = "ensembl_gene_id",
+  # specifying known ENS ID we are searching for.
+  values = "ENSG00000172057",
+  # The database connection we established earlier.
+  mart = ensembl
+)
+
+print(result)
+
+```
+
+
+For example, gene ORMDL3 has ENSEMBL identifier ENSG00000172057 (as determined and identified above). The coordinates supplied in this SummarizedExperiment are:
+
+```{r}
+
+rowRanges(airway)$ENSG00000172057
+
+```
+The output tells us that there are 20 exons that are catalogued for this gene. 
+
+We will look closely at the GenomicRanges infrastructure for working with structures like this. To check for the existence of overlapping regions in this list of exon coordinates, we can use the reduce method:
+
+```{r}
+
+reduce(rowRanges(airway)$ENSG00000172057)
+
+```
+This shows that projecting from the set of exons to the genome leads to 8 regions harboring subregions that may be transcribed.
+
+# Looking at sample level information
+
+In addition to detailed annotation of features, we need to manage information on samples. This occurs using the colData method. The $ operator can be used as a shortcut to get columns out of the sample data store.
+
+```{r}
+names(colData(airway))
+```
+
+```{r}
+
+table(airway$dex) # main treatment factor
+
+```
+
